@@ -5,7 +5,7 @@ import openai
 from openai import OpenAI
 import requests
 from dotenv import find_dotenv, load_dotenv
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 from functions import get_current_active_flights_from_chat, get_airports_from_chat, get_routes_from_chat
 from flask_cors import CORS
 from langchain.chat_models import ChatOpenAI
@@ -20,6 +20,8 @@ from langchain.agents.format_scratchpad import format_to_openai_function_message
 from langchain.agents.output_parsers import OpenAIFunctionsAgentOutputParser
 from langchain.agents import AgentExecutor
 from langchain.schema import HumanMessage, AIMessage, ChatMessage
+from langchain.chains import ConversationChain
+from langchain.memory import ConversationBufferWindowMemory
 
 load_dotenv(find_dotenv())
 client = OpenAI()
@@ -58,6 +60,7 @@ agent_executor = create_sql_agent(
     verbose=True,
     handle_parsing_errors=True,
 )
+
 # tools = [
 #     Tool(
 #         name="Get-Current-Active-Flights_From-Chat",
@@ -88,6 +91,13 @@ agent_executor = create_sql_agent(
 # )
 
 # agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
+
+memory = ConversationBufferWindowMemory(k=10)
+conversation = ConversationChain(
+    llm=llm,
+    memory=memory,
+    verbose=False,
+)
 
 tools = [
     {
@@ -249,6 +259,7 @@ tools = [
 
 @flask_app.route("/geopt/flights", methods=["POST"])
 def chat_geopt_flights():
+    print(memory.load_memory_variables({}))
     """
     Receive user input and return geopt agent messages and actions.
     Returns:
@@ -264,24 +275,49 @@ def chat_geopt_flights():
         tool_choice="auto",
     )
     
+    gpt_response_str = str(gpt_response)
+    
     flask_app.logger.info(gpt_response)
     
-    arguments_dict = json.loads(gpt_response.choices[0].message.tool_calls[0].function.arguments)
-    flask_app.logger.info(arguments_dict)
-    function_name = gpt_response.choices[0].message.tool_calls[0].function.name
-    
-    if function_name == "get_current_active_flights_from_chat":
-        response = get_current_active_flights_from_chat(**arguments_dict)
-        return response
-    elif function_name == "get_airports_from_chat":
-        response = get_airports_from_chat(**arguments_dict)
-        return response
-    elif function_name == "get_routes_from_chat":
-        response = get_routes_from_chat(**arguments_dict)
-        return response
+    tool_calls = gpt_response.choices[0].message.tool_calls
+    tool_response = None
+    if tool_calls:    
+        arguments_dict = json.loads(gpt_response.choices[0].message.tool_calls[0].function.arguments)
+        flask_app.logger.info(arguments_dict)
+        function_name = gpt_response.choices[0].message.tool_calls[0].function.name
+        if function_name == "get_current_active_flights_from_chat":
+            tool_response = get_current_active_flights_from_chat(**arguments_dict)
+            # return tool_response
+        elif function_name == "get_airports_from_chat":
+            tool_response = get_airports_from_chat(**arguments_dict)
+            # return tool_response
+        elif function_name == "get_routes_from_chat":
+            tool_response = get_routes_from_chat(**arguments_dict)
+            # return tool_response
     else:
-        return {"error": "No function found"}, 400
+        tool_response = {"error": "No data retrieved"}
+        # return {"error": "No function found"}, 400
     
+    if isinstance(tool_response, Response):
+        # Extract JSON data from the Response object
+        tool_response_data = tool_response.get_json()
+    else:
+        # If it's already a JSON string
+        tool_response_data = json.loads(tool_response) if isinstance(tool_response, str) else tool_response
+        
+    memory.save_context({"input": user_prompt }, {"output": tool_response_data})
+    
+    followup_prompt = "Answer my question directly and conversationally. Give a brief summary explaination of the result."
+    
+    chat_response = conversation.predict(input=followup_prompt)
+    print("CHAT RESPONSE:", chat_response)
+    
+    memory.save_context({"input": followup_prompt}, {"output": chat_response})
+        
+    return jsonify({
+        "chat_response": chat_response,
+        "tool_response": tool_response_data,
+    })
     
 @flask_app.route("/activeflights", methods=["POST"])
 def find_current_active_flights():
