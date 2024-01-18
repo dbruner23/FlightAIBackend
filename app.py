@@ -304,8 +304,11 @@ def chat_geopt_flights():
     else:
         # If it's already a JSON string
         tool_response_data = json.loads(tool_response) if isinstance(tool_response, str) else tool_response
-        
-    memory.save_context({"input": user_prompt }, {"output": tool_response_data})
+    
+    if (len(str(tool_response_data)) < 200):    
+        memory.save_context({"input": user_prompt }, {"output": tool_response_data})
+    else:
+        memory.save_context({"input": user_prompt }, {"output": "Results retrieval successful, but too large for compact summary and analysis."})
     
     followup_prompt = "Answer my question directly and conversationally. Give a brief summary explaination of the result."
     
