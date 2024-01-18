@@ -312,9 +312,9 @@ def chat_geopt_flights():
         # If it's already a JSON string
         tool_response_data = json.loads(tool_response) if isinstance(tool_response, str) else tool_response
     
-    if (tool_response and len(str(tool_response_data)) < 200):    
+    if (tool_response and len(str(tool_response_data)) < 1000):    
         memory.save_context({"input": user_prompt }, {"output": tool_response_data})
-    elif (tool_response and len(str(tool_response_data)) > 200):
+    elif (tool_response and len(str(tool_response_data)) > 1000):
         memory.save_context({"input": user_prompt }, {"output": "/{ response: /'success/', message: /'results will be displayed, but too long to summarize./'/}"})
     
     if (chat_response == None):
