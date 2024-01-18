@@ -1,12 +1,12 @@
 import os
 import json
 import psycopg2
-import openai
 from openai import OpenAI
 import requests
+import threading
 from dotenv import find_dotenv, load_dotenv
 from flask import Flask, request, jsonify, Response
-from functions import get_current_active_flights_from_chat, get_airports_from_chat, get_routes_from_chat
+from functions import keep_db_connection_stayin_alive, get_current_active_flights_from_chat, get_airports_from_chat, get_routes_from_chat
 from flask_cors import CORS
 from langchain.chat_models import ChatOpenAI
 from langchain.agents import load_tools, initialize_agent
@@ -23,6 +23,7 @@ from langchain.schema import HumanMessage, AIMessage, ChatMessage
 from langchain.chains import ConversationChain
 from langchain.memory import ConversationBufferWindowMemory
 
+
 load_dotenv(find_dotenv())
 client = OpenAI()
 flask_app = Flask(__name__)
@@ -34,6 +35,9 @@ AIRLABS_API_KEY = os.environ["AIRLABS_API_KEY"]
 airlabs_base_url = "https://airlabs.co/api/v9"
 DATABASE_URL = os.environ["NEON_URL"]
 connection = psycopg2.connect(DATABASE_URL)
+
+stayin_alive_thread = threading.Thread(target=keep_db_connection_stayin_alive, args=(300,), daemon=True)
+stayin_alive_thread.start()
 
 @flask_app.route("/datatest", methods=["GET"])
 def get_data(): 
@@ -281,6 +285,7 @@ def chat_geopt_flights():
     
     tool_calls = gpt_response.choices[0].message.tool_calls
     tool_response = None
+    chat_response = None
     if tool_calls:    
         arguments_dict = json.loads(gpt_response.choices[0].message.tool_calls[0].function.arguments)
         flask_app.logger.info(arguments_dict)
@@ -295,8 +300,10 @@ def chat_geopt_flights():
             tool_response = get_routes_from_chat(**arguments_dict)
             # return tool_response
     else:
-        tool_response = {"error": "No data retrieved"}
+        chat_response = str(gpt_response.choices[0].message.content)
         # return {"error": "No function found"}, 400
+    
+    print("TOOL_RESPONSE", tool_response)
     
     if isinstance(tool_response, Response):
         # Extract JSON data from the Response object
@@ -305,17 +312,20 @@ def chat_geopt_flights():
         # If it's already a JSON string
         tool_response_data = json.loads(tool_response) if isinstance(tool_response, str) else tool_response
     
-    if (len(str(tool_response_data)) < 200):    
+    if (tool_response and len(str(tool_response_data)) < 200):    
         memory.save_context({"input": user_prompt }, {"output": tool_response_data})
+    elif (tool_response and len(str(tool_response_data)) > 200):
+        memory.save_context({"input": user_prompt }, {"output": "/{ response: /'success/', message: /'results will be displayed, but too long to summarize./'/}"})
+    
+    if (chat_response == None):
+        followup_prompt = "Thanks! Now please answer my question directly and conversationally. Please give a brief summary explaination of the result."
+    
+        chat_response = conversation.predict(input=followup_prompt)
+        memory.save_context({"input": followup_prompt}, {"output": chat_response})
     else:
-        memory.save_context({"input": user_prompt }, {"output": "Results retrieval successful, but too large for compact summary and analysis."})
-    
-    followup_prompt = "Answer my question directly and conversationally. Give a brief summary explaination of the result."
-    
-    chat_response = conversation.predict(input=followup_prompt)
-    print("CHAT RESPONSE:", chat_response)
-    
-    memory.save_context({"input": followup_prompt}, {"output": chat_response})
+        memory.save_context({"input": user_prompt}, {"output": chat_response})
+        
+    print("CHAT RESPONSE: ", chat_response)
         
     return jsonify({
         "chat_response": chat_response,

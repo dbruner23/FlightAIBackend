@@ -12,18 +12,36 @@ from langchain.agents import tool
 import psycopg2
 from psycopg2 import pool
 from flask import Flask, request, jsonify
+import threading
+import time
 
 load_dotenv(find_dotenv())
 AIRLABS_API_KEY = os.environ["AIRLABS_API_KEY"]
 airlabs_base_url = "https://airlabs.co/api/v9"
 DATABASE_URL = os.environ["NEON_URL"]
-db_pool = pool.SimpleConnectionPool(1, 20, DATABASE_URL)
+db_pool = pool.ThreadedConnectionPool(1, 20, DATABASE_URL)
 
 def get_db_connection():
     return db_pool.getconn()
 
 def return_db_connection(conn):
     db_pool.putconn(conn)
+    
+def keep_db_connection_stayin_alive(interval=300):
+    """
+    Periodically executes a trivial query to keep the database connection alive.
+    :param interval: Interval in seconds between keep-alive queries.
+    """
+    while True:
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1")
+            cursor.close()
+            return_db_connection(conn)
+        except Exception as e:
+            print(f"Error keeping the DB connection alive: {e}")
+        time.sleep(interval)
 
 def get_current_active_flights_from_chat(**kwargs):
     """
