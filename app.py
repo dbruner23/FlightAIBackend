@@ -313,12 +313,13 @@ def chat_geopt_flights():
         tool_response_data = json.loads(tool_response) if isinstance(tool_response, str) else tool_response
     
     if (tool_response and len(str(tool_response_data)) < 1000):    
-        memory.save_context({"input": user_prompt }, {"output": tool_response_data})
+        memory.save_context({"input": user_prompt }, {"output": str(tool_response_data)})
     elif (tool_response and len(str(tool_response_data)) > 1000):
-        memory.save_context({"input": user_prompt }, {"output": "/{ response: /'success/', message: /'results will be displayed, but too long to summarize./'/}"})
+        truncated_result = str(tool_response_data)[:500]
+        memory.save_context({"input": user_prompt }, {"output": truncated_result})
     
     if (chat_response == None):
-        followup_prompt = "Thanks! Now please answer my question directly and conversationally. Please give a brief summary explaination of the result."
+        followup_prompt = "Thanks! Now please answer my input question directly and conversationally. Please give a brief summary explaining the result."
     
         chat_response = conversation.predict(input=followup_prompt)
         memory.save_context({"input": followup_prompt}, {"output": chat_response})
