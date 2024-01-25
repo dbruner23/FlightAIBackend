@@ -315,11 +315,16 @@ def chat_geopt_flights():
     if (tool_response and len(str(tool_response_data)) < 1000):    
         memory.save_context({"input": user_prompt }, {"output": str(tool_response_data)})
     elif (tool_response and len(str(tool_response_data)) > 1000):
-        truncated_result = str(tool_response_data)[:500]
-        memory.save_context({"input": user_prompt }, {"output": truncated_result})
+        truncated_result = str(tool_response_data)[:1000]
+        memory.save_context({"input": user_prompt }, {"output": f"truncated result: {truncated_result}..."})
     
-    if (chat_response == None):
-        followup_prompt = "Thanks! Now please answer my input question directly and conversationally. Please give a brief summary explaining the result."
+    if (chat_response == None and len(tool_response_data) > 0):
+        followup_prompt = "Thanks! The results have been displayed on the map. Now please answer my question directly and conversationally and give a brief summary explaining the result."
+    
+        chat_response = conversation.predict(input=followup_prompt)
+        memory.save_context({"input": followup_prompt}, {"output": chat_response})
+    elif (chat_response == None and len(tool_response_data) == 0):
+        followup_prompt = "Thanks! Now please answer my question directly and conversationally, and concisely state that the search yielded no results."
     
         chat_response = conversation.predict(input=followup_prompt)
         memory.save_context({"input": followup_prompt}, {"output": chat_response})
