@@ -375,5 +375,5 @@ def find_current_active_flights():
         print("Failed to retrieve data:", response)
         return response.json(), response.status_code
 
-if __name__ == "__main__":
-    flask_app.run(debug=True, host="localhost", port=4000)
+# if __name__ == "__main__":
+#     flask_app.run(debug=True, host="localhost", port=4000)
