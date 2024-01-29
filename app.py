@@ -40,7 +40,7 @@ stayin_alive_thread = threading.Thread(target=keep_db_connection_stayin_alive, a
 stayin_alive_thread.start()
 
 @flask_app.route("/datatest", methods=["GET"])
-def get_data(): 
+def get_data():
     """
     Fetch data from the database.
     Returns:
@@ -188,7 +188,7 @@ tools = [
                 },
             },
             "required": [],
-        }  
+        }
     },
     {
         "type": "function",
@@ -253,7 +253,7 @@ tools = [
                     "number_of_stops": {
                         "type": "integer",
                         "description": "Use to fetch all routes and intermediate routes between 1 or more origins and destinations that include less than or equal to the specified number of stops."
-                    }  
+                    }
                 }
             },
             "required": [],
@@ -271,22 +271,22 @@ def chat_geopt_flights():
     """
     data = request.get_json()
     user_prompt = data.get("prompt")
-    
+
     gpt_response = client.chat.completions.create(
         model="gpt-3.5-turbo-0613",
         messages=[{"role": "user", "content": user_prompt}],
         tools=tools,
         tool_choice="auto",
     )
-    
+
     gpt_response_str = str(gpt_response)
-    
+
     flask_app.logger.info(gpt_response)
-    
+
     tool_calls = gpt_response.choices[0].message.tool_calls
     tool_response = None
     chat_response = None
-    if tool_calls:    
+    if tool_calls:
         arguments_dict = json.loads(gpt_response.choices[0].message.tool_calls[0].function.arguments)
         flask_app.logger.info(arguments_dict)
         function_name = gpt_response.choices[0].message.tool_calls[0].function.name
@@ -302,36 +302,36 @@ def chat_geopt_flights():
     else:
         chat_response = str(gpt_response.choices[0].message.content)
         # return {"error": "No function found"}, 400
-    
+
     print("TOOL_RESPONSE", tool_response)
-    
+
     if isinstance(tool_response, Response):
         # Extract JSON data from the Response object
         tool_response_data = tool_response.get_json()
     else:
         # If it's already a JSON string
         tool_response_data = json.loads(tool_response) if isinstance(tool_response, str) else tool_response
-    
-    if (tool_response and len(str(tool_response_data)) < 1000):    
-        memory.save_context({"input": user_prompt }, {"output": tool_response_data})
+
+    if (tool_response and len(str(tool_response_data)) < 1000):
+        memory.save_context({"input": user_prompt }, {"output": str(tool_response_data)})
     elif (tool_response and len(str(tool_response_data)) > 1000):
         memory.save_context({"input": user_prompt }, {"output": "/{ response: /'success/', message: /'results will be displayed, but too long to summarize./'/}"})
-    
+
     if (chat_response == None):
         followup_prompt = "Thanks! Now please answer my question directly and conversationally. Please give a brief summary explaination of the result."
-    
+
         chat_response = conversation.predict(input=followup_prompt)
         memory.save_context({"input": followup_prompt}, {"output": chat_response})
     else:
         memory.save_context({"input": user_prompt}, {"output": chat_response})
-        
+
     print("CHAT RESPONSE: ", chat_response)
-        
+
     return jsonify({
         "chat_response": chat_response,
         "tool_response": tool_response_data,
     })
-    
+
 @flask_app.route("/activeflights", methods=["POST"])
 def find_current_active_flights():
     """
@@ -346,9 +346,9 @@ def find_current_active_flights():
     # Basic validation to ensure parameters are provided
     if not origin or not destination:
         return {"error": "Missing origin or destination parameter"}, 400
-    
+
     url = f"{airlabs_base_url}/flights"
-    
+
     params = {
         "api_key": AIRLABS_API_KEY,
         "dep_iata": origin,  # the IATA code for the origin airport
