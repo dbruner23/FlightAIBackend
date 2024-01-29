@@ -1,11 +1,11 @@
 python-dotenv
 langchain
 openai
-slack-sdk 
-slack-bolt 
 flask
 requests
 flask_cors
 langchain
 google-search-results
 psycopg2-binary
+gunicorn
+Flask-HTTPAuth

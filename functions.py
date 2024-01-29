@@ -42,6 +42,25 @@ def keep_db_connection_stayin_alive(interval=300):
         except Exception as e:
             print(f"Error keeping the DB connection alive: {e}")
         time.sleep(interval)
+        
+def get_user(username):
+    """
+    Fetch user from the database by username.
+    """
+    for _ in range(3):  # Retry up to 3 times
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
+            result = cursor.fetchone()
+            print(result)
+            cursor.close()
+            return_db_connection(conn)
+            return result
+        except psycopg2.OperationalError as e:
+            print(f"OperationalError occurred: {e}")
+            time.sleep(1)  # Wait for 1 second before retrying
+    return None
 
 def get_current_active_flights_from_chat(**kwargs):
     """
