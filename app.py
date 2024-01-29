@@ -11,17 +11,6 @@ from flask import Flask, request, jsonify, Response
 from functions import keep_db_connection_stayin_alive, get_user, get_current_active_flights_from_chat, get_airports_from_chat, get_routes_from_chat
 from flask_cors import CORS
 from langchain.chat_models import ChatOpenAI
-from langchain.agents import load_tools, initialize_agent
-from langchain.sql_database import SQLDatabase
-from langchain.agents import create_sql_agent
-from langchain.agents.agent_toolkits import SQLDatabaseToolkit
-from langchain.agents import AgentType, Tool
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.tools.render import format_tool_to_openai_function
-from langchain.agents.format_scratchpad import format_to_openai_function_messages
-from langchain.agents.output_parsers import OpenAIFunctionsAgentOutputParser
-from langchain.agents import AgentExecutor
-from langchain.schema import HumanMessage, AIMessage, ChatMessage
 from langchain.chains import ConversationChain
 from langchain.memory import ConversationBufferWindowMemory
 
