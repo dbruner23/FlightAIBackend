@@ -8,3 +8,4 @@ langchain
 google-search-results
 psycopg2-binary
 gunicorn
+Flask-HTTPAuth

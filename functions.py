@@ -42,6 +42,19 @@ def keep_db_connection_stayin_alive(interval=300):
         except Exception as e:
             print(f"Error keeping the DB connection alive: {e}")
         time.sleep(interval)
+        
+def get_user(username):
+    """
+    Fetch user from the database by username.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
+    result = cursor.fetchone()
+    print(result)
+    cursor.close()
+    return_db_connection(conn)
+    return result
 
 def get_current_active_flights_from_chat(**kwargs):
     """

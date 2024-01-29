@@ -1,12 +1,14 @@
 import os
 import json
 import psycopg2
+from flask_httpauth import HTTPBasicAuth
+from werkzeug.security import generate_password_hash, check_password_hash
 from openai import OpenAI
 import requests
 import threading
 from dotenv import find_dotenv, load_dotenv
 from flask import Flask, request, jsonify, Response
-from functions import keep_db_connection_stayin_alive, get_current_active_flights_from_chat, get_airports_from_chat, get_routes_from_chat
+from functions import keep_db_connection_stayin_alive, get_user, get_current_active_flights_from_chat, get_airports_from_chat, get_routes_from_chat
 from flask_cors import CORS
 from langchain.chat_models import ChatOpenAI
 from langchain.agents import load_tools, initialize_agent
@@ -27,6 +29,7 @@ from langchain.memory import ConversationBufferWindowMemory
 load_dotenv(find_dotenv())
 client = OpenAI()
 flask_app = Flask(__name__)
+auth = HTTPBasicAuth()
 CORS(flask_app)
 
 AVIATIONSTACK_API_KEY = os.environ["AVIATIONSTACK_API_KEY"]
@@ -39,6 +42,29 @@ connection = psycopg2.connect(DATABASE_URL)
 stayin_alive_thread = threading.Thread(target=keep_db_connection_stayin_alive, args=(300,), daemon=True)
 stayin_alive_thread.start()
 
+@auth.verify_password
+def verify_password(username, password):
+    user = get_user(username)
+    if user:
+        user_id, user_name, password_hash = user
+        if check_password_hash(password_hash, password):
+            return user
+
+@flask_app.route("/auth", methods=["POST"])    
+def authenticate():
+    credentials = request.json
+    username = credentials.get('username')
+    password = credentials.get('password')
+
+    if not username or not password:
+        return jsonify({"error": "Missing username or password"}), 400
+
+    if verify_password(username, password):
+        return jsonify({"message": "Authentication successful"}), 200
+    else:
+        return jsonify({"error": "Invalid credentials"}), 401
+
+#test function
 @flask_app.route("/datatest", methods=["GET"])
 def get_data(): 
     """
@@ -52,49 +78,7 @@ def get_data():
     cursor.close()
     return jsonify(data)
 
-# Initialize the agent
 llm = ChatOpenAI(model_name="gpt-3.5-turbo-0613", temperature=0)
-db = SQLDatabase.from_uri(DATABASE_URL)
-toolkit = SQLDatabaseToolkit(db=db, llm=llm)
-sql_tools = toolkit.get_tools()
-agent_executor = create_sql_agent(
-    toolkit=toolkit,
-    llm=llm,
-    agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-    verbose=True,
-    handle_parsing_errors=True,
-)
-
-# tools = [
-#     Tool(
-#         name="Get-Current-Active-Flights_From-Chat",
-#         func=get_current_active_flights_from_chat,
-#         description="useful for when you need to fetch currently active flights based on optional filters which can be passed as a dictionary of keyword arguments. Optional Parameters: - bbox (str): Bounding box coordinates in the format \"SW Lat,SW Long,NE Lat,NE Long\". - zoom (int): Map zoom level to reduce the number of flights for rendering (0-11). - airline_iata (str): Filtering by Airline IATA code. - flag (str): Filtering by Airline Country ISO 2 code from Countries DB. - flight_number (str): Filtering by Flight number only. - dep_iata (str): Filtering by departure Airport IATA code. - arr_iata (str): Filtering by arrival Airport IATA code.",
-#     ),
-# ]
-# llm_with_tools = llm.bind(functions=[format_tool_to_openai_function(t) for t in tools])
-
-# prompt = ChatPromptTemplate.from_messages(
-#     [
-#         ("system", "You are a helpful assistant"),
-#         ("user", "{input}"),
-#         MessagesPlaceholder(variable_name="agent_scratchpad"),
-#     ]
-# )
-
-# agent = (
-#     {
-#         "input": lambda x: x["input"],
-#         "agent_scratchpad": lambda x: format_to_openai_function_messages(
-#             x["intermediate_steps"]
-#         ),
-#     }
-#     | prompt
-#     | llm_with_tools
-#     | OpenAIFunctionsAgentOutputParser()
-# )
-
-# agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
 
 memory = ConversationBufferWindowMemory(k=10)
 conversation = ConversationChain(
@@ -262,6 +246,7 @@ tools = [
 ]
 
 @flask_app.route("/geopt/flights", methods=["POST"])
+@auth.login_required
 def chat_geopt_flights():
     print(memory.load_memory_variables({}))
     """
@@ -278,8 +263,6 @@ def chat_geopt_flights():
         tools=tools,
         tool_choice="auto",
     )
-    
-    gpt_response_str = str(gpt_response)
     
     flask_app.logger.info(gpt_response)
     
@@ -337,43 +320,6 @@ def chat_geopt_flights():
         "chat_response": chat_response,
         "tool_response": tool_response_data,
     })
-    
-@flask_app.route("/activeflights", methods=["POST"])
-def find_current_active_flights():
-    """
-    Test flightstack api.
-    Returns:
-        Response: A Flask response.
-    """
-    data = request.get_json()
-    origin = data.get('origin')
-    destination = data.get('destination')
 
-    # Basic validation to ensure parameters are provided
-    if not origin or not destination:
-        return {"error": "Missing origin or destination parameter"}, 400
-    
-    url = f"{airlabs_base_url}/flights"
-    
-    params = {
-        "api_key": AIRLABS_API_KEY,
-        "dep_iata": origin,  # the IATA code for the origin airport
-        "arr_iata": destination  # the IATA code for the destination airport
-    }
-
-    # Make the GET request to the API
-    response = requests.get(url, params=params)
-
-    # Check if the response was successful
-    if response.status_code == 200:
-        # Parse the flights from the response
-        print(response.json())
-        flights = response.json().get('response', [])
-        return flights
-    else:
-        # Handle errors
-        print("Failed to retrieve data:", response)
-        return response.json(), response.status_code
-
-# if __name__ == "__main__":
-#     flask_app.run(debug=True, host="localhost", port=4000)
+if __name__ == "__main__":
+    flask_app.run(debug=True, port=4000)
