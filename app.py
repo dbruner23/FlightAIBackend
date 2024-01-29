@@ -309,6 +309,3 @@ def chat_geopt_flights():
         "chat_response": chat_response,
         "tool_response": tool_response_data,
     })
-
-if __name__ == "__main__":
-    flask_app.run(debug=True, port=4000)
